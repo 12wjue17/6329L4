@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Schedule Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#0FC6C2',
+            success: '#00B42A',
+            warning: '#FF7D00',
+            danger: '#F53F3F',
+            purple: '#722ED1',
+            dark: '#1D2129',
+            'gray-100': '#F2F3F5',
+            'gray-200': '#E5E6EB',
+            'gray-300': '#C9CDD4',
+            'gray-400': '#86909C',
+            'gray-500': '#4E5969',
+          },
+          fontFamily: {
+            inter: ['Inter', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: 60px repeat(7, 1fr);
+      }
+      .time-slot {
+        height: 30px;
+        border-bottom: 1px solid #E5E6EB;
+      }
+      .schedule-item {
+        border-radius: 4px;
+        padding: 2px 4px;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .schedule-item:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .day-cell {
+        min-height: 100px;
+        border-right: 1px solid #E5E6EB;
+        border-bottom: 1px solid #E5E6EB;
+        transition: all 0.2s ease;
+      }
+      .day-cell:hover:not(.empty) {
+        background-color: #F5F7FA;
+      }
+      .day-header {
+        height: 30px;
+        border-right: 1px solid #E5E6EB;
+        border-bottom: 1px solid #E5E6EB;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 500;
+      }
+      .time-header {
+        height: 30px;
+        border-right: 1px solid #E5E6EB;
+        border-bottom: 1px solid #E5E6EB;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #86909C;
+      }
+      .current-day {
+        background-color: rgba(22, 93, 255, 0.1);
+        font-weight: 600;
+      }
+      .empty {
+        background-color: #F7F8FA;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-right: 16px;
+        margin-bottom: 8px;
+      }
+      .legend-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        margin-right: 6px;
+      }
+      .modal-backdrop {
+        backdrop-filter: blur(4px);
+      }
+    }
+  </style>
+</head>
+<body class="font-inter bg-gray-50 text-dark min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-calendar-check-o text-primary text-2xl"></i>
+        <h1 class="text-xl font-bold text-dark">Team Schedule Manager</h1>
+      </div>
+      
+      <div class="flex items-center space-x-6">
+        <div class="hidden md:flex items-center space-x-4">
+          <button id="toggle-view-btn" class="flex items-center space-x-1 text-gray-500 hover:text-primary transition-colors">
+            <i class="fa fa-th-large"></i>
+            <span>Calendar</span>
+          </button>
+          <button id="toggle-agenda-btn" class="flex items-center space-x-1 text-gray-500 hover:text-primary transition-colors">
+            <i class="fa fa-list"></i>
+            <span>Agenda</span>
+          </button>
+          <button id="toggle-availability-btn" class="flex items-center space-x-1 text-gray-500 hover:text-primary transition-colors">
+            <i class="fa fa-users"></i>
+            <span>Availability</span>
+          </button>
+        </div>
+        
+        <div class="relative">
+          <button class="flex items-center space-x-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
+            <img src="https://picsum.photos/id/1005/200/200" alt="User profile" class="w-8 h-8 rounded-full object-cover">
+            <span class="hidden md:inline text-sm font-medium">Alex Morgan</span>
+            <i class="fa fa-caret-down text-xs text-gray-400"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-grow container mx-auto px-4 py-6">
+    <!-- Calendar Navigation -->
+    <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center space-x-4">
+        <button id="prev-month" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+          <i class="fa fa-chevron-left text-gray-500"></i>
+        </button>
+        <h2 id="current-month" class="text-xl font-semibold">June 2025</h2>
+        <button id="next-month" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+          <i class="fa fa-chevron-right text-gray-500"></i>
+        </button>
+        <button id="today-btn" class="ml-2 px-3 py-1 text-sm font-medium text-primary border border-primary rounded-md hover:bg-primary/5 transition-colors">
+          Today
+        </button>
+      </div>
+      
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative">
+          <select id="view-selector" class="appearance-none bg-white border border-gray-200 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+            <option value="month">Month View</option>
+            <option value="week">Week View</option>
+            <option value="day">Day View</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+            <i class="fa fa-chevron-down text-xs"></i>
+          </div>
+        </div>
+        
+        <button id="new-event-btn" class="px-3 py-1.5 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors flex items-center gap-2">
+          <i class="fa fa-plus"></i>
+          <span>New Event</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Calendar View -->
+    <div id="calendar-view" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <!-- Calendar Header -->
+      <div class="calendar-grid bg-gray-50">
+        <div class="day-header font-medium">Time</div>
+        <div class="day-header">Sun</div>
+        <div class="day-header">Mon</div>
+        <div class="day-header">Tue</div>
+        <div class="day-header">Wed</div>
+        <div class="day-header">Thu</div>
+        <div class="day-header">Fri</div>
+        <div class="day-header">Sat</div>
+      </div>
+      
+      <!-- Calendar Body -->
+      <div class="calendar-grid">
+        <!-- Time slots from 9am to 6pm (18:00) -->
+        <div class="time-header font-medium">9:00 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">9:30 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">10:00 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-primary/10 text-primary border-l-2 border-primary" style="height: 60px;">
+            <div class="font-medium">Team Meeting</div>
+            <div class="text-xs text-gray-500">10:00 AM - 11:00 AM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-purple/10 text-purple border-l-2 border-purple" style="height: 30px;">
+            <div class="font-medium">Design Review</div>
+            <div class="text-xs text-gray-500">10:00 AM - 10:30 AM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">10:30 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-primary/10 text-primary border-l-2 border-primary" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">Team Meeting</div>
+            <div class="text-xs text-gray-500">10:00 AM - 11:00 AM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">11:00 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-warning/10 text-warning border-l-2 border-warning" style="height: 90px;">
+            <div class="font-medium">Client Call</div>
+            <div class="text-xs text-gray-500">11:00 AM - 12:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">11:30 AM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-warning/10 text-warning border-l-2 border-warning" style="height: 60px; margin-top: 30px;">
+            <div class="font-medium">Client Call</div>
+            <div class="text-xs text-gray-500">11:00 AM - 12:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">12:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-success/10 text-success border-l-2 border-success" style="height: 60px;">
+            <div class="font-medium">Lunch Break</div>
+            <div class="text-xs text-gray-500">12:00 PM - 1:00 PM</div>
+          </div>
+        </div>
+        <div class="day-cell">
+          <div class="schedule-item bg-warning/10 text-warning border-l-2 border-warning" style="height: 30px; margin-top: 60px;">
+            <div class="font-medium">Client Call</div>
+            <div class="text-xs text-gray-500">11:00 AM - 12:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-secondary/10 text-secondary border-l-2 border-secondary" style="height: 60px;">
+            <div class="font-medium">Project Update</div>
+            <div class="text-xs text-gray-500">12:00 PM - 1:00 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">12:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-success/10 text-success border-l-2 border-success" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">Lunch Break</div>
+            <div class="text-xs text-gray-500">12:00 PM - 1:00 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-secondary/10 text-secondary border-l-2 border-secondary" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">Project Update</div>
+            <div class="text-xs text-gray-500">12:00 PM - 1:00 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">1:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">1:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-danger/10 text-danger border-l-2 border-danger" style="height: 60px;">
+            <div class="font-medium">Product Demo</div>
+            <div class="text-xs text-gray-500">1:30 PM - 2:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">2:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-danger/10 text-danger border-l-2 border-danger" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">Product Demo</div>
+            <div class="text-xs text-gray-500">1:30 PM - 2:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">2:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-purple/10 text-purple border-l-2 border-purple" style="height: 60px;">
+            <div class="font-medium">UI/UX Discussion</div>
+            <div class="text-xs text-gray-500">2:30 PM - 3:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-primary/10 text-primary border-l-2 border-primary" style="height: 60px;">
+            <div class="font-medium">1-on-1 Meeting</div>
+            <div class="text-xs text-gray-500">2:30 PM - 3:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">3:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-purple/10 text-purple border-l-2 border-purple" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">UI/UX Discussion</div>
+            <div class="text-xs text-gray-500">2:30 PM - 3:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-primary/10 text-primary border-l-2 border-primary" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">1-on-1 Meeting</div>
+            <div class="text-xs text-gray-500">2:30 PM - 3:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">3:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-warning/10 text-warning border-l-2 border-warning" style="height: 60px;">
+            <div class="font-medium">Development Sync</div>
+            <div class="text-xs text-gray-500">3:30 PM - 4:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">4:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-warning/10 text-warning border-l-2 border-warning" style="height: 30px; margin-top: 30px;">
+            <div class="font-medium">Development Sync</div>
+            <div class="text-xs text-gray-500">3:30 PM - 4:30 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">4:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell">
+          <div class="schedule-item bg-secondary/10 text-secondary border-l-2 border-secondary" style="height: 30px;">
+            <div class="font-medium">Weekly Report</div>
+            <div class="text-xs text-gray-500">4:30 PM - 5:00 PM</div>
+          </div>
+        </div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">5:00 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        
+        <div class="time-header">5:30 PM</div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+        <div class="day-cell empty"></div>
+      </div>
+    </div>
+    
+    <!-- Legend -->
+    <div class="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <h3 class="font-medium mb-3">Schedule Types</h3>
+      <div class="flex flex-wrap">
+        <div class="legend-item">
+          <div class="legend-color bg-primary/10 border border-primary"></div>
+          <span class="text-sm">Meetings</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color bg-warning/10 border border-warning"></div>
+          <span class="text-sm">Client Calls</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color bg-success/10 border border-success"></div>
+          <span class="text-sm">Breaks</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color bg-danger/10 border border-danger"></div>
+          <span class="text-sm">Demos</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color bg-purple/10 border border-purple"></div>
+          <span class="text-sm">Reviews</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color bg-secondary/10 border border-secondary"></div>
+          <span class="text-sm">Updates</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Availability Checker -->
+    <div id="availability-view" class="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hidden">
+      <div class="p-4 border-b border-gray-200">
+        <h3 class="font-semibold text-lg">Find Available Time</h3>
+        <p class="text-gray-500 text-sm">Select participants to find common available slots</p>
+      </div>
+      
+      <div class="p-4">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Select Participants</label>
+          <div class="flex flex-wrap gap-2">
+            <div class="flex items-center space-x-2 px-3 py-1.5 bg-gray-100 rounded-full">
+              <img src="https://picsum.photos/id/1005/200/200" alt="Alex Morgan" class="w-6 h-6 rounded-full">
+              <span class="text-sm">Alex Morgan</span>
+              <button class="text-gray-400 hover:text-gray-600">
+                <i class="fa fa-times-circle"></i>
+              </button>
+            </div>
+            <div class="flex items-center space-x-2 px-3 py-1.5 bg-gray-100 rounded-full">
+              <img src="https://picsum.photos/id/1027/200/200" alt="Sarah Johnson" class="w-6 h-6 rounded-full">
+              <span class="text-sm">Sarah Johnson</span>
+              <button class="text-gray-400 hover:text-gray-600">
+                <i class="fa fa-times-circle"></i>
+              </button>
+            </div>
+            <div class="flex items-center space-x-2 px-3 py-1.5 bg-gray-100 rounded-full">
+              <img src="https://picsum.photos/id/1012/200/200" alt="Michael Chen" class="w-6 h-6 rounded-full">
+              <span class="text-sm">Michael Chen</span>
+              <button class="text-gray-400 hover:text-gray-600">
+                <i class="fa fa-times-circle"></i>
+              </button>
+            </div>
+            <button class="flex items-center space-x-1 px-3 py-1.5 border border-gray-200 rounded-full hover:bg-gray-50 transition-colors">
+              <i class="fa fa-plus text-gray-500"></i>
+              <span class="text-sm text-gray-600">Add</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <select class="appearance-none bg-white border border-gray-200 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                <option value="30">30 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="90">1 hour 30 minutes</option>
+                <option value="120">2 hours</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                <i class="fa fa-chevron-down text-xs"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <input type="date" value="2025-06-17" class="bg-white border border-gray-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+            </div>
+            <span class="text-gray-500">to</span>
+            <div class="relative">
+              <input type="date" value="2025-06-23" class="bg-white border border-gray-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+            </div>
+          </div>
+        </div>
+        
+        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors flex items-center gap-2">
+          <i class="fa fa-search"></i>
+          <span>Find Available Times</span>
+        </button>
+      </div>
+      
+      <div class="border-t border-gray-200">
+        <div class="p-4 bg-gray-50">
+          <h4 class="font-medium">Available Time Slots</h4>
+        </div>
+        
+        <div class="p-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Today, June 17</div>
+              <div class="text-sm text-gray-500">10:30 AM - 11:30 AM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Today, June 17</div>
+              <div class="text-sm text-gray-500">1:00 PM - 2:00 PM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Today, June 17</div>
+              <div class="text-sm text-gray-500">4:00 PM - 5:00 PM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Tomorrow, June 18</div>
+              <div class="text-sm text-gray-500">9:00 AM - 10:00 AM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Tomorrow, June 18</div>
+              <div class="text-sm text-gray-500">2:30 PM - 3:30 PM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
+              <div class="font-medium">Wednesday, June 19</div>
+              <div class="text-sm text-gray-500">11:00 AM - 12:00 PM</div>
+              <div class="mt-2 flex items-center space-x-1">
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-xs text-green-600">All available</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- New Event Modal -->
+  <div id="new-event-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+    <div class="absolute inset-0 bg-black/50 modal-backdrop" id="modal-backdrop"></div>
+    <div class="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden transform transition-all">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="font-semibold text-lg">New Event</h3>
+        <button id="close-modal" class="text-gray-400 hover:text-gray-600">
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="p-4">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" placeholder="Event title" class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input type="date" value="2025-06-17" class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <div class="relative">
+              <select class="appearance-none w-full bg-white border border-gray-200 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                <option value="meeting">Meeting</option>
+                <option value="client">Client Call</option>
+                <option value="break">Break</option>
+                <option value="demo">Demo</option>
+                <option value="review">Review</option>
+                <option value="update">Update</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                <i class="fa fa-chevron-down text-xs"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+            <input type="time" value="10:00" class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+            <input type="time" value="11:00" class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Participants</label>
+          <div class="flex flex-wrap gap-2 mb-2">
+            <div class="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full">
+              <img src="https://picsum.photos/id/1005/200/200" alt="Alex Morgan" class="w-5 h-5 rounded-full">
+              <span class="text-xs">Alex Morgan</span>
+              <button class="text-gray-400 hover:text-gray-600">
+                <i class="fa fa-times-circle"></i>
+              </button>
+            </div>
+          </div>
+          <div class="relative">
+            <input type="text" placeholder="Add participants" class="w-full border border-gray-200 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+              <i class="fa fa-search text-xs"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea rows="3" placeholder="Event description" class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"></textarea>
+        </div>
+        
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" class="rounded text-primary focus:ring-primary">
+              <span class="text-sm text-gray-700">Set as recurring</span>
+            </label>
+          </div>
+          <div>
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" class="rounded text-primary focus:ring-primary">
+              <span class="text-sm text-gray-700">All-day event</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="p-4 border-t border-gray-200 flex items-center justify-end space-x-3">
+        <button class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">Cancel</button>
+        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">Create Event</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Day View Modal -->
+  <div id="day-view-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+    <div class="absolute inset-0 bg-black/50 modal-backdrop" id="day-modal-backdrop"></div>
+    <div class="relative bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 overflow-hidden transform transition-all">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="font-semibold text-lg">Tuesday, June 17, 2025</h3>
+        <button id="close-day-modal" class="text-gray-400 hover:text-gray-600">
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="p-4">
+        <div class="mb-6">
+          <h4 class="font-medium mb-3">Events</h4>
+          
+          <div class="space-y-3">
+            <div class="border-l-2 border-primary bg-primary/5 p-3 rounded-r-md">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h5 class="font-medium text-primary">Team Meeting</h5>
+                  <div class="text-sm text-gray-500">10:00 AM - 11:00 AM</div>
+                  <div class="mt-2 flex flex-wrap gap-1">
+                    <div class="flex items-center space-x-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                      <i class="fa fa-user-o"></i>
+                      <span>Alex Morgan</span>
+                    </div>
+                    <div class="flex items-center space-x-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                      <i class="fa fa-user-o"></i>
+                      <span>Sarah Johnson</span>
+                    </div>
+                    <div class="flex items-center space-x-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                      <i class="fa fa-user-o"></i>
+                      <span>Michael Chen</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex space-x-2">
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-pencil"></i>
+                  </button>
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-trash-o"></i>
+                  </button>
+                </div>
+              </div>
+              <p class="mt-2 text-sm text-gray-600">Weekly team meeting to discuss progress and upcoming tasks.</p>
+            </div>
+            
+            <div class="border-l-2 border-success bg-success/5 p-3 rounded-r-md">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h5 class="font-medium text-success">Lunch Break</h5>
+                  <div class="text-sm text-gray-500">12:00 PM - 1:00 PM</div>
+                </div>
+                <div class="flex space-x-2">
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-pencil"></i>
+                  </button>
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-trash-o"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="border-l-2 border-purple bg-purple/5 p-3 rounded-r-md">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h5 class="font-medium text-purple">UI/UX Discussion</h5>
+                  <div class="text-sm text-gray-500">2:30 PM - 3:30 PM</div>
+                  <div class="mt-2 flex flex-wrap gap-1">
+                    <div class="flex items-center space-x-1 text-xs bg-purple/10 text-purple px-2 py-0.5 rounded">
+                      <i class="fa fa-user-o"></i>
+                      <span>Sarah Johnson</span>
+                    </div>
+                    <div class="flex items-center space-x-1 text-xs bg-purple/10 text-purple px-2 py-0.5 rounded">
+                      <i class="fa fa-user-o"></i>
+                      <span>Emily Wilson</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex space-x-2">
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-pencil"></i>
+                  </button>
+                  <button class="text-gray-400 hover:text-gray-600">
+                    <i class="fa fa-trash-o"></i>
+                  </button>
+                </div>
+              </div>
+              <p class="mt-2 text-sm text-gray-600">Discussion about the new design mockups and user feedback.</p>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <h4 class="font-medium mb-3">Availability</h4>
+          <div class="bg-gray-50 rounded-md p-3">
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+              <span class="text-sm">Available: 9:00 AM - 10:00 AM, 11:00 AM - 12:00 PM, 1:00 PM - 2:30 PM, 3:30 PM - 6:00 PM</span>
+            </div>
+            <button class="mt-2 text-sm text-primary hover:underline">Schedule new event</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="p-4 border-t border-gray-200 flex items-center justify-end">
+        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
